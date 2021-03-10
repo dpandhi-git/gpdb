@@ -1220,9 +1220,16 @@ class _GpExpandStatus(object):
             SELECT status FROM gpexpand.status ORDER BY updated DESC LIMIT 1
         '''
 
+        status_table_exists_sql = """
+            SELECT 1 FROM pg_class a, pg_namespace b WHERE a.relnamespace=b.oid AND a.relname='status' AND b.nspname='gpexpand'
+        """
+
         try:
             dburl = dbconn.DbURL(dbname=self.dbname)
             with dbconn.connect(dburl, encoding='UTF8') as conn:
+                if not dbconn.querySingleton(conn, status_table_exists_sql):
+                    conn.close()
+                    return False
                 status = dbconn.querySingleton(conn, sql)
             conn.close()
         except Exception:
