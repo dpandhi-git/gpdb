@@ -134,7 +134,7 @@ class SimpleMainLock:
     the parent process.
     """
 
-    def __init__(self, mainOptions):
+    def __init__(self, createOptionParserFn, mainOptions):
         self.pidlockpath = mainOptions.get('pidlockpath', None)  # the directory we're using for locking
         self.parentpidvar = mainOptions.get('parentpidvar', None)  # environment variable holding parent pid
         self.parentpid = None  # parent pid which already has the lock
@@ -147,8 +147,14 @@ class SimpleMainLock:
             self.parentpid = int(os.environ[self.parentpidvar])
 
         if self.pidlockpath is not None:
-            self.ppath = os.path.join(gp.get_masterdatadir(), self.pidlockpath)
-            self.pidlockfile = PIDLockFile(self.ppath)
+            try:
+                logger = gplog.get_default_logger()
+                parser = createOptionParserFn()
+                (options, args) = parser.parse_args()
+                self.ppath = os.path.join(gp.get_masterdatadir(), self.pidlockpath)
+                self.pidlockfile = PIDLockFile(self.ppath)
+            except:
+                return
 
     def acquire(self):
         """
@@ -267,7 +273,7 @@ def simple_main_internal(createOptionParserFn, createCommandFn, mainOptions):
     """
     sml = None
     if mainOptions is not None and 'pidlockpath' in mainOptions:
-        sml = SimpleMainLock(mainOptions)
+        sml = SimpleMainLock(createOptionParserFn, mainOptions)
         otherpid = sml.acquire()
         if otherpid is not None:
             logger = gplog.get_default_logger()
