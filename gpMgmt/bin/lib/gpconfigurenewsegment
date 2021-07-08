@@ -175,7 +175,7 @@ class ConfExpSegCmd(Command):
                             raise
                     logger.info("Successfully ran pg_basebackup: %s" % cmd.cmdStr)
 
-                    self.__logger.info("Starting mirrors")  # need to remove once rewind and basebaackup is merged as wrapper
+                    logger.info("Starting mirrors")  # need to remove once rewind and basebaackup is merged as wrapper
 
                     seg = Segment(None,None,self.dbid,None,'n','d',self.syncWithSegmentHostname,self.syncWithSegmentHostname,self.port,self.datadir)
 

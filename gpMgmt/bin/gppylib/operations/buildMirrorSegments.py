@@ -245,10 +245,10 @@ class GpMirrorListToBuild:
                 if toRecover.isFullSynchronization() and seg.getSegmentDbId() > 0:
                     fullResyncMirrorDbIds[seg.getSegmentDbId()] = True
 
-        # self.__ensureStopped(gpEnv, toStopDirectives)
-        # self.__ensureMarkedDown(gpEnv, toEnsureMarkedDown)
-        # # if not self.__forceoverwrite:
-        #     self.__cleanUpSegmentDirectories(cleanupDirectives)
+        self.__ensureStopped(gpEnv, toStopDirectives)
+        self.__ensureMarkedDown(gpEnv, toEnsureMarkedDown)
+        if not self.__forceoverwrite:
+             self.__cleanUpSegmentDirectories(cleanupDirectives)
 
         # should use mainUtils.getProgramName but I can't make it work!
         programName = os.path.split(sys.argv[0])[-1]
