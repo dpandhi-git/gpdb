@@ -198,6 +198,7 @@ class GpMirrorListToBuild:
         toEnsureMarkedDown = []
         cleanupDirectives = []
         copyDirectives = []
+        fullResyncMirrorDbIds = {}
         for toRecover in self.__mirrorsToBuild:
 
             if toRecover.getFailedSegment() is not None:
@@ -225,19 +226,13 @@ class GpMirrorListToBuild:
                 d = GpCopySegmentDirectoryDirective(toRecover.getLiveSegment(), targetSegment, isTargetReusedLocation)
                 copyDirectives.append(d)
 
-        self.__ensureStopped(gpEnv, toStopDirectives)
-        self.__ensureMarkedDown(gpEnv, toEnsureMarkedDown)
-        if not self.__forceoverwrite:
-            self.__cleanUpSegmentDirectories(cleanupDirectives)
-        self.__copySegmentDirectories(gpEnv, gpArray, copyDirectives)
-
         # update and save metadata in memory
         for toRecover in self.__mirrorsToBuild:
 
-            if toRecover.getFailoverSegment() is None:
-                # we are recovering the lost segment in place
-                seg = toRecover.getFailedSegment()
-            else:
+            # if toRecover.getFailoverSegment() is None:
+            #     # we are recovering the lost segment in place
+            #     seg = toRecover.getFailedSegment()
+            if toRecover.getFailoverSegment() is not None:
                 seg = toRecover.getFailedSegment()
                 # no need to update the failed segment's information -- it is
                 #   being overwritten in the configuration with the failover segment
@@ -245,18 +240,55 @@ class GpMirrorListToBuild:
                     if gpArraySegment is seg:
                         raise Exception(
                             "failed segment should not be in the new configuration if failing over to new segment")
-
                 seg = toRecover.getFailoverSegment()
-            seg.setSegmentStatus(gparray.STATUS_DOWN)  # down initially, we haven't started it yet
-            seg.setSegmentMode(gparray.MODE_NOT_SYNC)
+
+                if toRecover.isFullSynchronization() and seg.getSegmentDbId() > 0:
+                    fullResyncMirrorDbIds[seg.getSegmentDbId()] = True
+
+        # self.__ensureStopped(gpEnv, toStopDirectives)
+        # self.__ensureMarkedDown(gpEnv, toEnsureMarkedDown)
+        # # if not self.__forceoverwrite:
+        #     self.__cleanUpSegmentDirectories(cleanupDirectives)
+
+        # should use mainUtils.getProgramName but I can't make it work!
+        programName = os.path.split(sys.argv[0])[-1]
+
+        self.__logger.info("Updating configuration with new mirrors")
+        configInterface.getConfigurationProvider().updateSystemConfig(
+            gpArray,
+            "%s: segment config for resync" % programName,
+            dbIdToForceMirrorRemoveAdd=fullResyncMirrorDbIds,
+            useUtilityMode=False,
+            allowPrimary=False
+        )
+        self.__copySegmentDirectories(gpEnv, gpArray, copyDirectives)
+
+        # # update and save metadata in memory
+        # for toRecover in self.__mirrorsToBuild:
+        #
+        #     # if toRecover.getFailoverSegment() is None:
+        #     #     # we are recovering the lost segment in place
+        #     #     seg = toRecover.getFailedSegment()
+        #     if toRecover.getFailoverSegment() is not None:
+        #         seg = toRecover.getFailedSegment()
+        #         # no need to update the failed segment's information -- it is
+        #         #   being overwritten in the configuration with the failover segment
+        #         for gpArraySegment in gpArray.getDbList():
+        #             if gpArraySegment is seg:
+        #                 raise Exception(
+        #                     "failed segment should not be in the new configuration if failing over to new segment")
+            #
+            #     seg = toRecover.getFailoverSegment()
+            # seg.setSegmentStatus(gparray.STATUS_DOWN)  # down initially, we haven't started it yet
+            # seg.setSegmentMode(gparray.MODE_NOT_SYNC)
 
         # figure out what needs to be started or transitioned
         mirrorsToStart = []
         # Map of mirror dbid to GpMirrorListToBuild.RewindSegmentInfo objects
         rewindInfo = {}
-        primariesToConvert = []
-        convertPrimaryUsingFullResync = []
-        fullResyncMirrorDbIds = {}
+        # primariesToConvert = []
+        # convertPrimaryUsingFullResync = []
+
         timeStamp = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
         for toRecover in self.__mirrorsToBuild:
             seg = toRecover.getFailoverSegment()
@@ -278,28 +310,15 @@ class GpMirrorListToBuild:
 
             # The change in configuration to of the mirror to down requires that
             # the primary also be marked as unsynchronized.
-            primarySeg.setSegmentMode(gparray.MODE_NOT_SYNC)
-            primariesToConvert.append(primarySeg)
-            convertPrimaryUsingFullResync.append(toRecover.isFullSynchronization())
-
-            if toRecover.isFullSynchronization() and seg.getSegmentDbId() > 0:
-                fullResyncMirrorDbIds[seg.getSegmentDbId()] = True
-
-        # should use mainUtils.getProgramName but I can't make it work!
-        programName = os.path.split(sys.argv[0])[-1]
+            # primarySeg.setSegmentMode(gparray.MODE_NOT_SYNC)
+            # primariesToConvert.append(primarySeg)
+            # convertPrimaryUsingFullResync.append(toRecover.isFullSynchronization())
 
         # Disable Ctrl-C, going to save metadata in database and transition segments
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         rewindFailedSegments = []
         try:
-            self.__logger.info("Updating configuration with new mirrors")
-            configInterface.getConfigurationProvider().updateSystemConfig(
-                gpArray,
-                "%s: segment config for resync" % programName,
-                dbIdToForceMirrorRemoveAdd=fullResyncMirrorDbIds,
-                useUtilityMode=False,
-                allowPrimary=False
-            )
+
             self.__logger.info("Updating mirrors")
 
             if len(rewindInfo) != 0:
@@ -310,8 +329,11 @@ class GpMirrorListToBuild:
                 for failedSegment in rewindFailedSegments:
                     mirrorsToStart.remove(failedSegment)
 
-            self.__logger.info("Starting mirrors")
-            start_all_successful = self.__startAll(gpEnv, gpArray, mirrorsToStart)
+                self.__logger.info("Starting mirrors")
+                start_all_successful = self.__startAll(gpEnv, gpArray, mirrorsToStart)
+
+         #    self.__logger.info("Starting mirrors")
+         # #   start_all_successful = self.__startAll(gpEnv, gpArray, mirrorsToStart)
         finally:
             # Re-enable Ctrl-C
             signal.signal(signal.SIGINT, signal.default_int_handler)
@@ -319,7 +341,8 @@ class GpMirrorListToBuild:
         if len(rewindFailedSegments) != 0:
             return False
 
-        return start_all_successful
+        if len(rewindInfo) != 0:
+            return start_all_successful
 
     def run_pg_rewind(self, rewindInfo):
         """

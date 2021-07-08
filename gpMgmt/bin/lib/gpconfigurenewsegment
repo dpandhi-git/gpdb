@@ -173,8 +173,30 @@ class ConfExpSegCmd(Command):
                         except Exception as e:
                             self.set_results(CommandResult(1, b'', str(e).encode(), True, False))
                             raise
-
                     logger.info("Successfully ran pg_basebackup: %s" % cmd.cmdStr)
+
+                    self.__logger.info("Starting mirrors")  # need to remove once rewind and basebaackup is merged as wrapper
+
+                    seg = Segment(None,None,self.dbid,None,'n','d',self.syncWithSegmentHostname,self.syncWithSegmentHostname,self.port,self.datadir)
+
+                    #start the individual segment
+                    segStartCmd = SegmentStart(
+                        name="Starting new segment dbid %s on host %s." % (str(self.dbid), self.syncWithSegmentHostname)
+                        , gpdb=seg
+                        , numContentsInCluster=0  # Starting seg on it's own.
+                        , era=None
+                        , mirrormode="mirror"  #TBD
+                        , utilityMode=True
+                        , specialMode=None) #TBD
+                    # , ctxt=LOCAL
+                    # , remoteHost=seg.getSegmentHostName()
+                    # , pg_ctl_wait=True
+                    # , timeout=SEGMENT_TIMEOUT_DEFAULT)
+
+                    logger.info("segment start command %s" %segStartCmd)
+
+                    segStartCmd.run(validateAfter=True)
+
                     return
 
                 logger.info("Create or update data directories for new segment")
