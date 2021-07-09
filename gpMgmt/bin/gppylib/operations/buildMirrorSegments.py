@@ -261,7 +261,7 @@ class GpMirrorListToBuild:
             useUtilityMode=False,
             allowPrimary=False
         )
-        self.__copySegmentDirectories(gpEnv, gpArray, copyDirectives)
+        start_all_successful = self.__copySegmentDirectories(gpEnv, gpArray, copyDirectives)
 
         # # update and save metadata in memory
         # for toRecover in self.__mirrorsToBuild:
@@ -313,6 +313,8 @@ class GpMirrorListToBuild:
             # primarySeg.setSegmentMode(gparray.MODE_NOT_SYNC)
             # primariesToConvert.append(primarySeg)
             # convertPrimaryUsingFullResync.append(toRecover.isFullSynchronization())
+        if len(rewindInfo) == 0:
+            return start_all_successful
 
         # Disable Ctrl-C, going to save metadata in database and transition segments
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -644,12 +646,18 @@ class GpMirrorListToBuild:
             cmds.append(
                 createConfigureNewSegmentCommand(hostName, 'configure blank segments', False))
 
-        self.__runWaitAndCheckWorkerPoolForErrorsAndClear(cmds, "unpacking basic segment directory",
+        completed_cmds = self.__runWaitAndCheckWorkerPoolForErrorsAndClear(cmds, "unpacking basic segment directory",
                                                           suppressErrorCheck=False,
                                                           progressCmds=progressCmds)
 
         self.__runWaitAndCheckWorkerPoolForErrorsAndClear(removeCmds, "removing pg_basebackup progress logfiles",
                                                           suppressErrorCheck=False)
+
+        all_cmds_successful = True
+        for cmd in completed_cmds:
+            if not cmd.was_successful():
+                all_cmds_successful = False
+                self.__logger.warning("command failed for %s." % cmd.cmdStr)
 
         #
         # copy dump files from old segment to new segment
@@ -670,6 +678,8 @@ class GpMirrorListToBuild:
                                   recursive=True)
                         cmd.run(validateAfter=True)
                         break
+
+        return all_cmds_successful
 
     def _get_running_postgres_segments(self, segments):
         running_segments = []
