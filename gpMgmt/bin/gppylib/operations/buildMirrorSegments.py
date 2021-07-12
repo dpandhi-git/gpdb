@@ -229,10 +229,10 @@ class GpMirrorListToBuild:
         # update and save metadata in memory
         for toRecover in self.__mirrorsToBuild:
 
-            # if toRecover.getFailoverSegment() is None:
-            #     # we are recovering the lost segment in place
-            #     seg = toRecover.getFailedSegment()
-            if toRecover.getFailoverSegment() is not None:
+            if toRecover.getFailoverSegment() is None:
+                # we are recovering the lost segment in place
+                seg = toRecover.getFailedSegment()
+            else:
                 seg = toRecover.getFailedSegment()
                 # no need to update the failed segment's information -- it is
                 #   being overwritten in the configuration with the failover segment
@@ -242,8 +242,8 @@ class GpMirrorListToBuild:
                             "failed segment should not be in the new configuration if failing over to new segment")
                 seg = toRecover.getFailoverSegment()
 
-                if toRecover.isFullSynchronization() and seg.getSegmentDbId() > 0:
-                    fullResyncMirrorDbIds[seg.getSegmentDbId()] = True
+            if toRecover.isFullSynchronization() and seg.getSegmentDbId() > 0:
+                fullResyncMirrorDbIds[seg.getSegmentDbId()] = True
 
         self.__ensureStopped(gpEnv, toStopDirectives)
         self.__ensureMarkedDown(gpEnv, toEnsureMarkedDown)
