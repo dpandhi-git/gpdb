@@ -929,7 +929,7 @@ class ConfigureNewSegment(Command):
         if verbose:
             cmdStr += ' -v '
         if batchSize:
-            cmdStr += ' -b %s' % batchSize
+            cmdStr += ' -b %s' % batchSizeSegmentRewind
         if validationOnly:
             cmdStr += " --validation-only"
         if writeGpIdFileOnly:

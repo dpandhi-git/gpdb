@@ -416,15 +416,15 @@ class GpMirrorListToBuild:
 
         return rewindFailedSegments
 
-    def remove_postmaster_pid_from_remotehost(self, host, datadir):
-        cmd = base.Command(name = 'remove the postmaster.pid file',
-                           cmdStr = 'rm -f %s/postmaster.pid' % datadir,
-                           ctxt=gp.REMOTE, remoteHost = host)
-        cmd.run()
-
-        return_code = cmd.get_return_code()
-        if return_code != 0:
-            raise ExecutionError("Failed while trying to remove postmaster.pid.", cmd)
+    # def remove_postmaster_pid_from_remotehost(self, host, datadir):
+    #     cmd = base.Command(name = 'remove the postmaster.pid file',
+    #                        cmdStr = 'rm -f %s/postmaster.pid' % datadir,
+    #                        ctxt=gp.REMOTE, remoteHost = host)
+    #     cmd.run()
+    #
+    #     return_code = cmd.get_return_code()
+    #     if return_code != 0:
+    #         raise ExecutionError("Failed while trying to remove postmaster.pid.", cmd)
 
     def checkForPortAndDirectoryConflicts(self, gpArray):
         """
