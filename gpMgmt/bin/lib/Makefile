@@ -11,6 +11,7 @@ PROGRAMS= __init__.py \
 	gp_bash_functions.sh \
 	gp_bash_version.sh \
 	gpconfigurenewsegment \
+	gprewind.py \
 	gpcreateseg.sh \
 	gppinggpfdist.py \
 	gpstate.py \

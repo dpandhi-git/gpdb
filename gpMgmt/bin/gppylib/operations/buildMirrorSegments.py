@@ -288,7 +288,7 @@ class GpMirrorListToBuild:
         rewindInfo = {}
         # primariesToConvert = []
         # convertPrimaryUsingFullResync = []
-
+        rewindSegments = []
         timeStamp = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
         for toRecover in self.__mirrorsToBuild:
             seg = toRecover.getFailoverSegment()
@@ -313,26 +313,27 @@ class GpMirrorListToBuild:
             # primarySeg.setSegmentMode(gparray.MODE_NOT_SYNC)
             # primariesToConvert.append(primarySeg)
             # convertPrimaryUsingFullResync.append(toRecover.isFullSynchronization())
-        if len(rewindInfo) == 0:
-            return start_all_successful
+        # if len(rewindInfo) == 0:
+        #     return start_all_successful
 
         # Disable Ctrl-C, going to save metadata in database and transition segments
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        rewindFailedSegments = []
+        # rewindFailedSegments = []
         try:
 
             self.__logger.info("Updating mirrors")
 
             if len(rewindInfo) != 0:
                 self.__logger.info("Running pg_rewind on failed segments")
-                rewindFailedSegments = self.run_pg_rewind(rewindInfo)
-
-                # Do not start mirrors that failed pg_rewind
-                for failedSegment in rewindFailedSegments:
-                    mirrorsToStart.remove(failedSegment)
-
-                self.__logger.info("Starting mirrors")
-                start_all_successful = self.__startAll(gpEnv, gpArray, mirrorsToStart)
+                start_all_successful = self.__configure_rewind_segments(rewindInfo)
+                # rewindFailedSegments = self.run_pg_rewind(rewindInfo)
+                #
+                # # Do not start mirrors that failed pg_rewind
+                # for failedSegment in rewindFailedSegments:
+                #     mirrorsToStart.remove(failedSegment)
+                #
+                # self.__logger.info("Starting mirrors")
+                # start_all_successful = self.__startAll(gpEnv, gpArray, mirrorsToStart)
 
          #    self.__logger.info("Starting mirrors")
          # #   start_all_successful = self.__startAll(gpEnv, gpArray, mirrorsToStart)
@@ -340,11 +341,12 @@ class GpMirrorListToBuild:
             # Re-enable Ctrl-C
             signal.signal(signal.SIGINT, signal.default_int_handler)
 
-        if len(rewindFailedSegments) != 0:
-            return False
+        # if len(rewindFailedSegments) != 0:
+        #     return False
 
-        if len(rewindInfo) != 0:
-            return start_all_successful
+        # if len(rewindInfo) != 0:
+        #     return start_all_successful
+        return start_all_successful
 
     def run_pg_rewind(self, rewindInfo):
         """
@@ -425,6 +427,69 @@ class GpMirrorListToBuild:
     #     return_code = cmd.get_return_code()
     #     if return_code != 0:
     #         raise ExecutionError("Failed while trying to remove postmaster.pid.", cmd)
+
+    def buildSegmentInfoForRewind(self, rewindInfo):
+
+        result = {}
+
+        for rewindSeg in list(rewindInfo.values()):
+            targetHostname = rewindSeg.targetSegment.getSegmentHostName()
+            if targetHostname in result:
+                result[targetHostname] += ","
+            else:
+                result[targetHostname] = ""
+
+            result[targetHostname] += '%s:%d:%d:%s:%s:%d:%s' % (rewindSeg.sourceHostname,
+                                                                rewindSeg.sourcePort,
+                                                                rewindSeg.targetSegment.getSegmentDbId(),
+                                                                rewindSeg.targetSegment.getSegmentHostName(),
+                                                                rewindSeg.targetSegment.getSegmentDataDirectory(),
+                                                                rewindSeg.targetSegment.getSegmentPort(),
+                                                                rewindSeg.progressFile
+                                                                )
+        return result
+
+    def __configure_rewind_segments(self, rewindInfo):
+        self.__logger.info('Configuring new segments')
+        cmds = []
+        progressCmds = []
+        removeCmds= []
+
+
+        for targetHostname, segInfo in self.buildSegmentInfoForRewind(rewindInfo).items():
+            # for segment in destSegmentByHost[hostName]:
+            #     progressCmd, removeCmd = self.__getProgressAndRemoveCmds(segment.progressFile,
+            #                                                              segment.getSegmentDbId(),
+            #                                                              hostName)
+            #     removeCmds.append(removeCmd)
+            #     if progressCmd:
+            #         progressCmds.append(progressCmd)
+
+
+            cmds.append(
+                gp.ConfigureRewindSegment('configure rewind segments',
+                                          segInfo,
+                                          gplog.get_logger_dir(),
+                                          self.__parallelPerHost,
+                                          False,
+                                          base.REMOTE,
+                                          targetHostname))
+
+        completed_cmds = self.__runWaitAndCheckWorkerPoolForErrorsAndClear(cmds, "unpacking basic segment directory",
+                                                                           suppressErrorCheck=False,
+                                                                           progressCmds=None)
+
+        # self.__runWaitAndCheckWorkerPoolForErrorsAndClear(removeCmds, "removing pg_basebackup progress logfiles",
+        #                                                   suppressErrorCheck=False)
+
+        all_cmds_successful = True
+        for cmd in completed_cmds:
+            if not cmd.was_successful():
+                all_cmds_successful = False
+                self.__logger.warning("command failed for %s." % cmd.cmdStr)
+
+        return all_cmds_successful
+
 
     def checkForPortAndDirectoryConflicts(self, gpArray):
         """

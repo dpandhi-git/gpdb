@@ -908,6 +908,25 @@ class GpDirsExist(Command):
         # This is > 1 because the command output will terminate with \n
         return dirCount > 1
 
+#-----------------------------------------------
+class ConfigureRewindSegment(Command):
+    """
+    Configure a new segment, usually from a template, as is done during gpexpand, gpaddmirrors, gprecoverseg (full),
+      etc.
+    """
+
+    def __init__(self, name, confinfo, logdir,
+                 batchSize=None, verbose=False,ctxt=LOCAL, remoteHost=None):
+
+        cmdStr = '$GPHOME/bin/lib/gprewind.py -c \"%s\" -l %s' % (confinfo, pipes.quote(logdir))
+
+        if verbose:
+            cmdStr += ' -v '
+        if batchSize:
+            cmdStr += ' -b %s' % batchSize
+
+        Command.__init__(self, name, cmdStr, ctxt, remoteHost)
+
 
 #-----------------------------------------------
 class ConfigureNewSegment(Command):
