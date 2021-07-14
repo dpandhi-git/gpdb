@@ -479,6 +479,7 @@ class GpMirrorListToBuild:
         result = {}
         for targetHostname, rewindSegs in destSegmentByHost.items():
             for rewindSeg in rewindSegs:
+
                 progressCmd, removeCmd = self.__getProgressAndRemoveCmds(rewindSeg.progressFile,
                                                                          rewindSeg.targetSegment.getSegmentDbId(),
                                                                          targetHostname)
@@ -511,10 +512,10 @@ class GpMirrorListToBuild:
 
         completed_cmds = self.__runWaitAndCheckWorkerPoolForErrorsAndClear(cmds, "unpacking basic segment directory",
                                                                            suppressErrorCheck=False,
-                                                                           progressCmds=None)
+                                                                           progressCmds=progressCmds)
 
-        # self.__runWaitAndCheckWorkerPoolForErrorsAndClear(removeCmds, "removing pg_basebackup progress logfiles",
-        #                                                   suppressErrorCheck=False)
+        self.__runWaitAndCheckWorkerPoolForErrorsAndClear(removeCmds, "removing pg_rewind progress logfiles",
+                                                          suppressErrorCheck=False)
 
         all_cmds_successful = True
         for cmd in completed_cmds:
