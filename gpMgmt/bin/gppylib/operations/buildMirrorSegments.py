@@ -449,23 +449,57 @@ class GpMirrorListToBuild:
                                                                 )
         return result
 
+    def __foobar(self, rewindInfo):
+        result = {}
+
+        for rewindSeg in list(rewindInfo.values()):
+            targetHostname = rewindSeg.targetSegment.getSegmentHostName()
+            if targetHostname not in result:
+                result[targetHostname] = []
+            result[targetHostname].append(rewindSeg)
+        return result
+
     def __configure_rewind_segments(self, rewindInfo):
         self.__logger.info('Configuring new segments')
         cmds = []
         progressCmds = []
         removeCmds= []
 
-
-        for targetHostname, segInfo in self.buildSegmentInfoForRewind(rewindInfo).items():
-            # for segment in destSegmentByHost[hostName]:
-            #     progressCmd, removeCmd = self.__getProgressAndRemoveCmds(segment.progressFile,
-            #                                                              segment.getSegmentDbId(),
-            #                                                              hostName)
-            #     removeCmds.append(removeCmd)
-            #     if progressCmd:
-            #         progressCmds.append(progressCmd)
+        destSegmentByHost = self.__foobar(rewindInfo)
 
 
+        # for targetHostname, segInfo in self.buildSegmentInfoForRewind(rewindInfo).items():
+        #     for segment in destSegmentByHost[hostName]:
+        #         progressCmd, removeCmd = self.__getProgressAndRemoveCmds(segment.progressFile,
+        #                                                                  segment.getSegmentDbId(),
+        #                                                                  hostName)
+        #         removeCmds.append(removeCmd)
+        #         if progressCmd:
+        #             progressCmds.append(progressCmd)
+        result = {}
+        for targetHostname, rewindSegs in destSegmentByHost.items():
+            for rewindSeg in rewindSegs:
+                progressCmd, removeCmd = self.__getProgressAndRemoveCmds(rewindSeg.progressFile,
+                                                                         rewindSeg.targetSegment.getSegmentDbId(),
+                                                                         targetHostname)
+                removeCmds.append(removeCmd)
+                if progressCmd:
+                    progressCmds.append(progressCmd)
+                if targetHostname in result:
+                    result[targetHostname] += ","
+                else:
+                    result[targetHostname] = ""
+
+                result[targetHostname] += '%s:%d:%d:%s:%s:%d:%s' % (rewindSeg.sourceHostname,
+                                                                    rewindSeg.sourcePort,
+                                                                    rewindSeg.targetSegment.getSegmentDbId(),
+                                                                    targetHostname,
+                                                                    rewindSeg.targetSegment.getSegmentDataDirectory(),
+                                                                    rewindSeg.targetSegment.getSegmentPort(),
+                                                                    rewindSeg.progressFile
+                                                                    )
+
+        for targetHostname, segInfo in result.items():
             cmds.append(
                 gp.ConfigureRewindSegment('configure rewind segments',
                                           segInfo,

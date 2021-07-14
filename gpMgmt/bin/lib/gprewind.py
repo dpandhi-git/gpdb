@@ -9,6 +9,7 @@ import shutil
 from gppylib.commands.gp import SegmentRewind, SegmentStart
 from gppylib.gpparseopts import OptParser, OptChecker
 from gppylib.db import dbconn
+from gppylib.commands.gp import REMOTE
 from gppylib.commands import unix
 from gppylib.commands.pg import DbStatus
 from gppylib import gplog
@@ -29,12 +30,12 @@ EXECNAME = os.path.split(__file__)[-1]
 
 
 class PgConfigureRewind(Command):
-    def __init__(self, name, cmdstr, logger,sourceHostname, sourcePort,targetdbid, targetHostname,targetdatadir,targetPort, progressFile, shouldDeleteProgressFile, progressMode):
+    def __init__(self, name, cmdstr, logger,sourceHostName, sourcePort,targetdbid, targetHostName,targetdatadir,targetPort, progressFile, shouldDeleteProgressFile=False, progressMode=None):
         self.logger = logger
-        self.sourceHostname = sourceHostname
+        self.sourceHostName = sourceHostName
         self.sourcePort = sourcePort
         self.targetdbid = targetdbid
-        self.targetHostname = targetHostname
+        self.targetHostName = targetHostName
         self.targetdatadir = targetdatadir
         self.targetPort = targetPort
         self.progressFile = progressFile
@@ -43,8 +44,8 @@ class PgConfigureRewind(Command):
         Command.__init__(self, name, cmdstr)
 
     def run(self):
-        self.logger.debug('Do CHECKPOINT on %s (port: %d) before running pg_rewind.' % (self.sourceHostname, self.sourcePort))
-        dburl = dbconn.DbURL(hostname=self.sourceHostname,
+        self.logger.debug('Do CHECKPOINT on %s (port: %d) before running pg_rewind.' % (self.sourceHostName, self.sourcePort))
+        dburl = dbconn.DbURL(hostname=self.sourceHostName,
                              port=self.sourcePort,
                              dbname='template1')
         conn = dbconn.connect(dburl, utility=True)
@@ -70,7 +71,7 @@ class PgConfigureRewind(Command):
                                self.targetdbid,
                                self.targetHostName,
                                self.targetdatadir ,
-                               self.sourceHostname,
+                               self.sourceHostName,
                                self.sourcePort,
                                self.progressFile,
                                verbose=True)
@@ -124,7 +125,7 @@ class PgConfigureRewind(Command):
     def remove_postmaster_pid_from_remotehost(self, host, datadir):
         cmd = Command(name = 'remove the postmaster.pid file',
                            cmdStr = 'rm -f %s/postmaster.pid' % datadir,
-                           ctxt=gp.REMOTE, remoteHost = host)
+                           ctxt=REMOTE, remoteHost = host)
         cmd.run()
 
         return_code = cmd.get_return_code()
@@ -166,27 +167,28 @@ def parseargs():
     conf_lines = options.confinfo.split(',')
     for line in conf_lines:
         conf_vals = line.split(':')
-        if len(conf_vals) < 5:
+        if len(conf_vals) < 7:
             raise Exception('Invalid configuration value: %s' % conf_vals)
-        if conf_vals[0] == '':
-            raise Exception('Missing data directory in: %s' % conf_vals)
-        try:
-            if int(conf_vals[1]) < 1024:
-                conf_vals[1] = int(conf_vals[1])
-        except Exception as e:
-            raise Exception('Invalid port in: %s' % conf_vals)
-        if conf_vals[2] != 'true' and conf_vals[2] != 'false':
-            raise Exception('Invalid isPrimary option in: %s' % conf_vals)
-        if conf_vals[3] != 'true' and conf_vals[3] != 'false':
-            raise Exception('Invalid directory validation option in: %s' % conf_vals)
-        try:
-            conf_vals[4] = int(conf_vals[4])
-        except:
-            raise Exception('Invalid dbid option in: %s' % conf_vals)
-        try:
-            conf_vals[5] = int(conf_vals[5])
-        except:
-            raise Exception('Invalid contentid option in: %s' % conf_vals)
+        # toDO Below add validation
+        # if conf_vals[0] == '':
+        #     raise Exception('Missing data directory in: %s' % conf_vals)
+        # try:
+        #     if int(conf_vals[1]) < 1024:
+        #         conf_vals[1] = int(conf_vals[1])
+        # except Exception as e:
+        #     raise Exception('Invalid port in: %s' % conf_vals)
+        # if conf_vals[2] != 'true' and conf_vals[2] != 'false':
+        #     raise Exception('Invalid isPrimary option in: %s' % conf_vals)
+        # if conf_vals[3] != 'true' and conf_vals[3] != 'false':
+        #     raise Exception('Invalid directory validation option in: %s' % conf_vals)
+        # try:
+        #     conf_vals[4] = int(conf_vals[4])
+        # except:
+        #     raise Exception('Invalid dbid option in: %s' % conf_vals)
+        # try:
+        #     conf_vals[5] = int(conf_vals[5])
+        # except:
+        #     raise Exception('Invalid contentid option in: %s' % conf_vals)
         seg_info.append(conf_vals)
 
     seg_info_len = len(seg_info)
@@ -212,10 +214,10 @@ try:
     pool = WorkerPool(numWorkers=options.batch_size)
 
     for seg in seg_info:
-        sourceHostname = seg[0]
+        sourceHostName = seg[0]
         sourcePort = int(seg[1])
         targetdbid = int(seg[2])
-        targetHostname = seg[3]
+        targetHostName = seg[3]
         targetdatadir = seg[4]
         targetPort = int(seg[5])
         progressFile = seg[6]
@@ -223,10 +225,10 @@ try:
         cmd = PgConfigureRewind( name = 'Rewind segment directory'
                              , cmdstr = ' '.join(sys.argv)
                              , logger = logger
-                             , sourceHostname = sourceHostname
+                             , sourceHostName = sourceHostName
                              , sourcePort = sourcePort
                              , targetdbid = targetdbid
-                             , targetHostname = targetHostname
+                             , targetHostName = targetHostName
                              , targetdatadir = targetdatadir
                              , targetPort = targetPort
                              , progressFile  = progressFile
@@ -235,25 +237,14 @@ try:
 
     pool.join()
 
-    if options.validationOnly:
-        errors = []
-        for item in pool.getCompletedItems():
-            if not item.get_results().wasSuccessful:
-                errors.append(str(item.get_results().stderr).replace("\n", " "))
-
-        if errors:
-            print("\n".join(errors), file=sys.stderr)
-            sys.exit(1)
-        else: sys.exit(0)
-    else:
-        try:
-            pool.check_results()
-        except Exception as e:
-            if options.verbose:
-                logger.exception(e)
-            logger.error(e)
-            print(e, file=sys.stderr)
-            sys.exit(1)
+    try:
+        pool.check_results()
+    except Exception as e:
+        if options.verbose:
+            logger.exception(e)
+        logger.error(e)
+        print(e, file=sys.stderr)
+        sys.exit(1)
 
     sys.exit(0)
 
